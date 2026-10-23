@@ -3,146 +3,65 @@ import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import cors from "cors";
 
-dotenv.config()
+dotenv.config();
 
 console.log(
     "API KEY:",
     process.env.GEMINI_API_KEY ? "FOUND" : "NOT FOUND"
 );
 
-const app = express()
+const app = express();
 app.use(cors());
-
 app.use(express.json());
-app.use(express.static("public"))
-
+app.use(express.static("public"));
 
 const AI = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY
-})
+});
 
-app.post("/ask-gemini" ,async(req , res)=>{
-
-    try{
-        const question = req.body.question;
-        if(!question){
-            return res.status(400).json({
-                error:"question is required"
-            })
+async function generateWithRetry(prompt) {
+    const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
+    for (const model of models) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                return await AI.models.generateContent({ model, contents: prompt });
+            } catch (err) {
+                if (err.status !== 503) throw err;
+                await new Promise(r => setTimeout(r, 1500));
+            }
         }
-    const response = await AI.models.generateContent({
-    model: "gemini-3.5-flash",
-    contents: `Give me a short explanation of ${question}.
-    Do not use Markdown, asterisks (*), bold text, or special formatting.
-    Use plain text only.`
-})
-        
+    }
+    throw new Error("The AI is busy right now. Please try again in a minute.");
+}
+
+app.post("/ask-gemini", async (req, res) => {
+    try {
+        const question = req.body.question;
+        if (!question) {
+            return res.status(400).json({
+                error: "question is required"
+            });
+        }
+
+        const response = await generateWithRetry(
+            `Give me a short explanation of ${question}.
+            Do not use Markdown, asterisks (*), bold text, or special formatting.
+            Use plain text only.`
+        );
 
         res.json({
             answer: response.text
-        })
-     
+        });
 
-    }catch(error){
-            console.error("Gemini API Error:", error);
-
-    res.status(500).json({
-        error: error.message
-
-        })
+    } catch (error) {
+        console.error("Gemini API Error:", error);
+        res.status(500).json({
+            error: error.message
+        });
     }
-})
+});
 
-app.listen(5000,()=>{
-    console.log("server running at http://localhost:5000");
-
-})
-
-
-
-
-
-
-// ========================================================================================
-
-
-// import express from "express"
-// const app = express()
-// // app.use(express.json())
-
-// app.get("/",(req,res)=>{
-//    res.send("backend is working ")
-// })
-
-// app.listen(4000,()=>{
-//     console.log("hello backend ")
-// })
-
-
-
-
-
-
-// import express from 'express'
-// const app = express()
-// app.use(express.json());
-
-// app.post("/ask",(req,res )=>{
-//     console.log(req.body)
-//     res.json({
-//         message:"Successed",
-//         user:req.body
-//     })
-// })
-
-// app.listen(4000,()=>{
-//     console.log(`http://localhost:4000/ask`)
-// })
-
-
-
-// import express from 'express'
-// const app = express()
-// app.use(express.json());
-
-
-// app.post("/ask",(req,res)=>{
-//     console.log(req.body)
-//     res.json({
-//         mes
-//     })
-// })
-
-// import express from 'express'
-// const app = express()
-// app.use(express.json());
-// app.post("/user",(req,res)=>{
-//     console.log(req.body)
-//     res.send("Data received")
-// })
-
-// app.listen(4000,()=>{
-//     console.log("Server is running on port 4000")
-// })
-
-// import express from 'express'
-// const app = express()
-// app.use(express.json)
-// app.use('/ask',(req,res)=>{
-//     console.log(req.body)
-//     res.send("Data recived")
-// })
-// app.listen(3000,()=>{
-//     console.log("server is running on port 3000")
-// })
-
-
-
-
-// import express from 'express'
-// const app = express()
-// app.use(express.json())
-// app.use("/home",(req,res)=>{
-//     console.log("hello")
-// })
-// app.listen(3000,()=>{})
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
